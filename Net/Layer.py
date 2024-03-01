@@ -1,5 +1,5 @@
 import numpy as np
-import ActivationFunction
+from ActivationFunction.ActivationFunction import ActivationFunction
 
 class Layer():
   def __init__(self, previous_layer_neurons: int, number_of_neurons: int, activation_function: ActivationFunction, random_initialize_weights: bool = True, random_initialize_bias: bool = True, learning_rate: float = 0.01):
