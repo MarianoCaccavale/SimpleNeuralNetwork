@@ -26,7 +26,7 @@ class SoftMaxActivationFunction(ActivationFunction):
     for i in range(0, softmax_values.shape[0]):
       for j in range(0, x.shape[0]):
         if i == j:
-          gradient[i] = softmax_values[i] * (1-x[i])
+          gradient[i] = softmax_values[i] * (1-x[j])
         else:
           gradient[i] = -softmax_values[i]*x[j]
     return np.array(gradient)
