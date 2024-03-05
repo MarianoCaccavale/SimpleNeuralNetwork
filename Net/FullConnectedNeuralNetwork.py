@@ -1,11 +1,12 @@
 from abc import ABC
 from CostFunction import *
-import Layer
 import numpy as np
 from TrainingMethod.TrainingMethod import *
 from CostFunction.CostFunction import *
-from Layer import *
+from Net.Layer import Layer
 from typing import List
+
+import math
 
 
 class FullConnectedNeuralNetwork(ABC):
@@ -40,18 +41,16 @@ class FullConnectedNeuralNetwork(ABC):
 
     return previous_layer_outputs
 
-  def __compute_validation_error(self):
+  def __compute_validation_error(self, validation_set: np.ndarray, validation_targets: np.ndarray):
     error = 0
-    for sample, ground_truth in zip(self.validation_set.T, self.validation_targets.T):
+    for sample, ground_truth in zip(validation_set.T, validation_targets.T):
       net_output = self.predict(sample)
-      index_of_max_net_output = np.argmax(net_output)
-      index_of_max_ground_truth = np.argmax(ground_truth)
       error = error + self.cost_function.compute(net_output, ground_truth)
 
-    mean_error = error / self.validation_set.shape[1]
+    mean_error = error / validation_set.shape[1]
     return mean_error
 
-  def train(self, training_set: np.array, ground_truths: np.array, validation_set: np.array, validation_targets: np.array, epochs: int, training_method: TrainingMethod = TrainingMethod.BATCH, batch_size: float = 0.1):
+  def train(self, training_set: np.array, ground_truths: np.array, epochs: int, training_method: TrainingMethod = TrainingMethod.BATCH, validation_set: np.array = None, validation_targets: np.array = None, batch_size: float = 0.1):
 
     if training_set.shape[1] != ground_truths.shape[1]:
       raise Exception(f"Training set e ground_truths non hanno lo stesso numero di campioni!")
@@ -60,11 +59,12 @@ class FullConnectedNeuralNetwork(ABC):
       if validation_set.shape[1] != validation_targets.shape[1]:
         raise Exception(f"validation_set e validation_targets non hanno lo stesso numero di campioni!")
 
-      self.validation_set = validation_set
-      self.validation_targets = validation_targets
-
     if epochs <= 0:
       raise Exception("Il numero di epoch per l'addestramento deve essere almeno 1!")
+
+    self.mean_train_error = []
+    self.mean_val_error = []
+    self.accuracies = []
 
     number_of_samples = training_set.shape[1]
     print(f"Working with {number_of_samples} samples")
@@ -90,8 +90,9 @@ class FullConnectedNeuralNetwork(ABC):
 
           # Ad inizio di ogni epoca, uso la rete allo stato corrente per calcolarmi l'errore medio sul validation_set. In questo modo non vado in "conflitto" con l'aggiornamento
           # dei pesi(calcolo il val_error PRIMA di aggiornare i pesi)
-          if self.validation_set is not None:
-              val_error = self.__compute_validation_error()
+          if validation_set is not None:
+              val_error = self.__compute_validation_error(validation_set, validation_targets)
+              self.mean_val_error.append(val_error)
 
           # Per tutto il training set
           for training_sample, ground_truth in zip(training_set.T, ground_truths.T):
@@ -99,8 +100,6 @@ class FullConnectedNeuralNetwork(ABC):
             net_output = self.__feed_forward(training_sample)
             # Sommo gli errori campione per campione
             error = error + self.cost_function.compute(net_output, ground_truth)
-            error_gradient = self.cost_function.compute_derivate(net_output, ground_truth)
-
             index_of_max_net_output = np.argmax(net_output)
             index_of_max_ground_truth = np.argmax(ground_truth)
 
@@ -129,9 +128,11 @@ class FullConnectedNeuralNetwork(ABC):
             self.layers[layer_index].update_parameters(sum_of_weights_delta[layer_index], sum_of_biases_delta[layer_index])
 
           mean_error = error / number_of_samples
+          self.mean_train_error.append(mean_error)
           self.accuracy = self.accuracy / number_of_samples
-          if self.validation_set is not None:
-            print(f"Fine epoch #{epoch}; mean_train_error = {mean_error:1.8f} - mean_val_error: {val_error:1.8f}- accuracy = {self.accuracy:1.8f}")
+          self.accuracies.append(self.accuracy)
+          if validation_set is not None:
+            print(f"Fine epoch #{epoch}; mean_train_error = {mean_error:1.8f} - mean_val_error: {val_error:1.8f} - accuracy = {self.accuracy:1.8f}")
           else:
             print(f"Fine epoch #{epoch}; mean_train_error = {mean_error:1.8f} - accuracy = {self.accuracy:1.8f}")
 
@@ -154,8 +155,9 @@ class FullConnectedNeuralNetwork(ABC):
 
             # Ad inizio di ogni epoca, uso la rete allo stato corrente per calcolarmi l'errore medio sul validation_set. In questo modo non vado in "conflitto" con
             # l'aggiornamento dei pesi(calcolo il val_error PRIMA di aggiornare i pesi)
-            if self.validation_set is not None:
-                val_error = self.__compute_validation_error()
+            if validation_set is not None:
+                val_error = self.__compute_validation_error(validation_set, validation_targets)
+                self.mean_val_error.append(val_error)
 
             # Mantengo due liste, in cui ad ogni indice trovo i delta di aggiornamento dell'i-esimo livello. Ad ogni training example sommo i delta, per poi farne la media
             # una volta finito il batch
@@ -165,8 +167,7 @@ class FullConnectedNeuralNetwork(ABC):
             for training_sample, ground_truth in zip(mini_training_batch.T, mini_ground_truth_batch.T):
               net_output = self.__feed_forward(training_sample)
               error = error + self.cost_function.compute(net_output, ground_truth)
-              error_gradient = self.cost_function.compute_derivate(net_output, ground_truth)
-
+              
               index_of_max_net_output = np.argmax(net_output)
               index_of_max_ground_truth = np.argmax(ground_truth)
 
@@ -192,9 +193,11 @@ class FullConnectedNeuralNetwork(ABC):
               self.layers[layer_index].update_parameters(sum_of_weights_delta[layer_index], sum_of_biases_delta[layer_index])
 
           mean_error = error / number_of_samples
+          self.mean_train_error.append(mean_error)
           self.accuracy = self.accuracy / number_of_samples
-          if self.validation_set is not None:
-            print(f"Fine epoch #{epoch}; mean_train_error = {mean_error:1.8f} - mean_val_error: {val_error:1.8f}- accuracy = {self.accuracy:1.8f}")
+          self.accuracies.append(self.accuracy)
+          if validation_set is not None:
+            print(f"Fine epoch #{epoch}; mean_train_error = {mean_error:1.8f} - mean_val_error: {val_error:1.8f} - accuracy = {self.accuracy:1.8f}")
           else:
             print(f"Fine epoch #{epoch}; mean_train_error = {mean_error:1.8f} - accuracy = {self.accuracy:1.8f}")
 
@@ -206,16 +209,13 @@ class FullConnectedNeuralNetwork(ABC):
 
           # Ad inizio di ogni epoca, uso la rete allo stato corrente per calcolarmi l'errore medio sul validation_set. In questo modo non vado in "conflitto" con
           # l'aggiornamento dei pesi(calcolo il val_error PRIMA di aggiornare i pesi)
-          if self.validation_set is not None:
-            mean_val_error = self.__compute_validation_error()
+          if validation_set is not None:
+            val_error = self.__compute_validation_error(validation_set, validation_targets)
+            self.mean_val_error.append(val_error)
 
           for training_sample, ground_truth in zip(training_set.T, ground_truths.T):
             net_output = self.__feed_forward(training_sample)
             error = error + self.cost_function.compute(net_output, ground_truth)
-            error_gradient = self.cost_function.compute_derivate(net_output, ground_truth)
-
-            if self.validation_set is not None:
-              val_error = val_error + self.__compute_validation_error()
 
             index_of_max_net_output = np.argmax(net_output)
             index_of_max_ground_truth = np.argmax(ground_truth)
@@ -228,9 +228,11 @@ class FullConnectedNeuralNetwork(ABC):
               self.layers[layer_index].update_parameters(sum_of_weights_delta[layer_index], sum_of_biases_delta[layer_index])
 
           mean_error = error / number_of_samples
+          self.mean_train_error.append(mean_error)
           self.accuracy = self.accuracy / number_of_samples
-          if self.validation_set is not None:
-            print(f"Fine epoch #{epoch}; mean_train_error = {mean_error:1.8f} - mean_val_error: {val_error:1.8f}- accuracy = {self.accuracy:1.8f}")
+          self.accuracies.append(self.accuracy)
+          if validation_set is not None:
+            print(f"Fine epoch #{epoch}; mean_train_error = {mean_error:1.8f} - mean_val_error: {val_error:1.8f} - accuracy = {self.accuracy:1.8f}")
           else:
             print(f"Fine epoch #{epoch}; mean_train_error = {mean_error:1.8f} - accuracy = {self.accuracy:1.8f}")
 
