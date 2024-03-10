@@ -47,8 +47,15 @@ class FullConnectedNeuralNetwork(ABC):
       net_output = self.predict(sample)
       error = error + self.cost_function.compute(net_output, ground_truth)
 
+      index_of_max_net_output = np.argmax(net_output)
+      index_of_max_ground_truth = np.argmax(ground_truth)
+
+      if index_of_max_net_output == index_of_max_ground_truth:
+        accuracy = accuracy + 1
+
     mean_error = error / validation_set.shape[1]
-    return mean_error
+    mean_accuracy = accuracy / validation_set.shape[1]
+    return mean_error, mean_accuracy
 
   def train(self, training_set: np.array, ground_truths: np.array, epochs: int, training_method: TrainingMethod = TrainingMethod.BATCH, validation_set: np.array = None, validation_targets: np.array = None, batch_size: float = 0.1):
 
@@ -64,6 +71,7 @@ class FullConnectedNeuralNetwork(ABC):
 
     self.mean_train_error = []
     self.mean_val_error = []
+    self.mean_val_accuracy = []
     self.accuracies = []
 
     number_of_samples = training_set.shape[1]
@@ -91,8 +99,9 @@ class FullConnectedNeuralNetwork(ABC):
           # Ad inizio di ogni epoca, uso la rete allo stato corrente per calcolarmi l'errore medio sul validation_set. In questo modo 
           # non vado in "conflitto" con l'aggiornamento dei pesi(calcolo il val_error PRIMA di aggiornare i pesi)
           if validation_set is not None:
-              val_error = self.__compute_validation_error(validation_set, validation_targets)
+              val_error, val_accuracy = self.__compute_validation_error(validation_set, validation_targets)
               self.mean_val_error.append(val_error)
+              self.mean_val_accuracy.append(val_accuracy)
 
           # Per tutto il training set
           for training_sample, ground_truth in zip(training_set.T, ground_truths.T):
