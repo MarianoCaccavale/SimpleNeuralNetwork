@@ -88,8 +88,8 @@ class FullConnectedNeuralNetwork(ABC):
           sum_of_weights_delta = []
           sum_of_biases_delta = []
 
-          # Ad inizio di ogni epoca, uso la rete allo stato corrente per calcolarmi l'errore medio sul validation_set. In questo modo non vado in "conflitto" con l'aggiornamento
-          # dei pesi(calcolo il val_error PRIMA di aggiornare i pesi)
+          # Ad inizio di ogni epoca, uso la rete allo stato corrente per calcolarmi l'errore medio sul validation_set. In questo modo 
+          # non vado in "conflitto" con l'aggiornamento dei pesi(calcolo il val_error PRIMA di aggiornare i pesi)
           if validation_set is not None:
               val_error = self.__compute_validation_error(validation_set, validation_targets)
               self.mean_val_error.append(val_error)
