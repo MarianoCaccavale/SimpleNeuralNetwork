@@ -43,6 +43,7 @@ class FullConnectedNeuralNetwork(ABC):
 
   def __compute_validation_error(self, validation_set: np.ndarray, validation_targets: np.ndarray):
     error = 0
+    accuracy = 0
     for sample, ground_truth in zip(validation_set.T, validation_targets.T):
       net_output = self.predict(sample)
       error = error + self.cost_function.compute(net_output, ground_truth)
