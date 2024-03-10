@@ -23,7 +23,7 @@ class MeanSquaredError(CostFunction):
 
 class CrossEntropy(CostFunction):
   def compute(output: np.ndarray, ground_truth: np.ndarray) -> float:
-    observation_log = np.log(output, where=output!=0)
+    observation_log = np.log(output, where=output>0)
     log_losses = -np.multiply(ground_truth, observation_log)
     return np.sum(log_losses)
   def compute_derivate(output: np.ndarray, ground_truth: np.ndarray) -> float:
