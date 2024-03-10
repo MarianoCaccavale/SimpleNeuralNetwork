@@ -16,19 +16,20 @@ class FullConnectedNeuralNetworkBprop(FullConnectedNeuralNetwork):
       # Output layer
       if layer_index == len(self.layers) - 1:
         dCdA = self.cost_function.compute_derivate(layer.A, ground_truth)[:, np.newaxis]
+        dCdA *= layer.activation_function_derivative
         dZdW = self.layers[layer_index - 1].A[:, np.newaxis].T
         
       else:
         dAdZ = layer.activation_function_derivative[:, np.newaxis]
         first_part = np.dot(self.layers[layer_index + 1].weights.T, last_dCdA)
-        dCdA = first_part *  dAdZ
+        dCdA = first_part * dAdZ
         dZdW = layer.X[:, np.newaxis].T
 
-      dw = (1/layer.number_of_neurons) * np.dot(dCdA, dZdW)
+      dw = np.dot(dCdA, dZdW) / layer.number_of_neurons
         
-      db = (1/layer.number_of_neurons) * np.sum(dCdA, axis = 1, keepdims=True)
+      db = np.sum(dCdA, axis = 1, keepdims=True) / layer.number_of_neurons
 
-      weights_delta.append(dw)
+      weights_delta.append(-dw)
       biases_delta.append(db)
 
       last_dCdA = dCdA
