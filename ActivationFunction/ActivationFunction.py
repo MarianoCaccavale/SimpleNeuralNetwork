@@ -18,9 +18,11 @@ class IdentityActivationFunction(ActivationFunction):
 class SoftMaxActivationFunction(ActivationFunction):
   # Given the fact that np.exp tent to overflow, we use the stable softmax
   def compute(x:np.array) -> np.array:
-    x_exp=np.exp(x-np.max(x))
+    x_exp:np.float256=np.exp(x-np.max(x))
     return x_exp/np.sum(x_exp)
   def compute_derivate(x:np.array) -> np.array:
+    return np.full_like(x, 1)
+  """def compute_derivate(x:np.array) -> np.array:
     gradient = np.empty((x.shape[0], x.shape[0]))
     softmax_values = SoftMaxActivationFunction.compute(x)
     for i in range(0, softmax_values.shape[0]):
@@ -29,7 +31,7 @@ class SoftMaxActivationFunction(ActivationFunction):
           gradient[i] = softmax_values[i] * (1-x[j])
         else:
           gradient[i] = -softmax_values[i]*x[j]
-    return np.array(gradient)
+    return np.array(gradient)"""
 
 class SigmoidActivationFunction(ActivationFunction):
   def compute(x:np.array) -> np.array:
