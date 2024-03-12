@@ -47,6 +47,14 @@ class FullConnectedNeuralNetworkRprop(FullConnectedNeuralNetwork):
                                             np.maximum(self.step_sizes[layer_index] * self.rprop_eta_minus, self.min_step_size), 
                                             self.step_sizes[layer_index])
 
+  def _improve_gradient(self, gradient_diffs: np.array, current_gradient: np.array):
+    return np.where(gradient_diffs >= 0, current_gradient, 0)
+    """for row_index in range(0, gradient_diffs.shape[0]):
+      for col_index in range(0, gradient_diffs.shape[1]):
+        if gradient_diffs is not None and gradient_diffs[row_index, col_index] < 0:
+          current_gradient[row_index][col_index] = 0
+    return current_gradient"""
+
   def _back_propagate(self, ground_truth: np.array):
 
     last_delta_valore = 0
@@ -75,6 +83,7 @@ class FullConnectedNeuralNetworkRprop(FullConnectedNeuralNetwork):
       if self.last_gradient_per_layer[layer_index] is not None:
         gradient_change = self._compute_gradient_change(self.last_gradient_per_layer[layer_index], dw)
         self._update_step_size(layer_index, gradient_change)
+        dw = self._improve_gradient(gradient_change, dw)
 
       weights_delta.append(-(-np.sign(dw) * self.step_sizes[layer_index]))
       biases_delta.append(db)
