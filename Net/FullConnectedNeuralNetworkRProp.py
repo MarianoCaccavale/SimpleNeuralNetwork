@@ -64,17 +64,16 @@ class FullConnectedNeuralNetworkRprop(FullConnectedNeuralNetwork):
     biases_delta = []
 
     for layer_index in range(len(self.layers)-1, -1, -1):
-
       layer = self.layers[layer_index]
-      
-      dAdZ = layer.activation_function_derivative[:, np.newaxis] # 10, 1
-      dZdW = self.layers[layer_index - 1].A[:, np.newaxis] if layer_index != 0 else self.layers[layer_index].X[:, np.newaxis] # 256, 1
+    
+      dAdZ = layer.activation_function_derivative # 10, 1
+      dZdW = self.layers[layer_index].X # 256, 1
 
       # Output layer
       if layer_index == len(self.layers) - 1:
-        dCdA = self.cost_function.compute_derivate(layer.A, ground_truth)[:, np.newaxis] # 10, 1
+        dCdA = self.cost_function.compute_derivate(layer.A, ground_truth) # 10, 1
       else:
-        dCdA = np.dot(self.layers[layer_index + 1].weights.T, last_delta_valore)
+        dCdA = np.matmul(self.layers[layer_index + 1].weights.T, last_delta_valore)
 
       delta_valore = np.multiply(dAdZ, dCdA) #10, 1
       dw = np.dot(delta_valore, dZdW.T)# / layer.number_of_neurons
