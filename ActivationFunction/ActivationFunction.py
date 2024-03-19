@@ -18,8 +18,9 @@ class IdentityActivationFunction(ActivationFunction):
 class SoftMaxActivationFunction(ActivationFunction):
   # Given the fact that np.exp tent to overflow, we use the stable softmax
   def compute(x:np.ndarray) -> np.ndarray:
-    x_exp:np.float256=np.exp(x-np.max(x))
-    return x_exp/np.sum(x_exp)
+    x_exp=np.exp(x-np.max(x))
+    x_exp_sum = x_exp.sum(axis = 0)
+    return x_exp / x_exp_sum
   def compute_derivate(x:np.ndarray) -> np.ndarray:
     return np.full_like(x, 1)
   """def compute_derivate(x:np.ndarray) -> np.ndarray:
