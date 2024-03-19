@@ -29,7 +29,7 @@ class FullConnectedNeuralNetwork(ABC):
     # self.precision = 0
     # self.recall = 0
 
-  def __feed_forward(self, input: np.array) -> np.array:
+  def __feed_forward(self, input: np.ndarray) -> np.ndarray:
     if input.shape[0] != self.layers[0].previous_layer_neurons:
       raise Exception(f"Input di dimensione non corretta! La rete si aspetta in input un vettore di dimensione {self.layers[0].previous_layer_neurons} ma l'input fornito ha dimensioni {input.shape[0]}")
 
@@ -52,11 +52,49 @@ class FullConnectedNeuralNetwork(ABC):
 
     accuracy = np.where(index_of_max_net_output == index_of_max_ground_truth, 1, 0).sum()
 
-    mean_error = error / (validation_set.shape[1] + 1)
-    mean_accuracy = accuracy / (validation_set.shape[1] + 1)
+    mean_error = error / (validation_set.shape[1])
+    mean_accuracy = accuracy / (validation_set.shape[1])
     return mean_error, mean_accuracy
+  
+  def _back_propagate(self, ground_truth: np.ndarray):
+    last_delta_valore = 0
+    layer_index = 0
 
-  def train(self, training_set: np.array, ground_truths: np.array, epochs: int, training_method: TrainingMethod = TrainingMethod.BATCH, validation_set: np.array = None, validation_targets: np.array = None, batch_size: float = 0.1):
+    weights_delta = []
+    biases_delta = []
+
+    for layer_index in range(len(self.layers)-1, -1, -1):
+      layer = self.layers[layer_index]
+      
+      dZdW = self.layers[layer_index].X # 256, 1
+      dAdZ = layer.activation_function_derivative # 10, 1
+
+      # Output layer
+      if layer_index == len(self.layers) - 1:
+        dCdA = self.cost_function.compute_derivate(layer.A, ground_truth) # 10, 1
+      else:
+        dCdA = np.matmul(self.layers[layer_index + 1].weights.T, last_delta_valore)
+
+      delta_valore = np.multiply(dAdZ, dCdA) #10, 1
+      dw = np.matmul(delta_valore, dZdW.T)
+      dw /= delta_valore.shape[1]
+
+      db = dCdA.sum(axis = 1, keepdims=True)
+      db /= delta_valore.shape[1]
+
+      weights_delta.append(dw)
+      biases_delta.append(db)
+
+      last_delta_valore = delta_valore
+
+    # I delta dei pesi e i delta dei biases sono "al contrario", ovvero quelli in posizione 0 della lista in realtà sono per il layer di output, quindi faccio il
+    # reverse della lista per averli sistemati
+    weights_delta.reverse()
+    biases_delta.reverse()
+
+    return weights_delta, biases_delta
+
+  def train(self, training_set: np.ndarray, ground_truths: np.ndarray, epochs: int, training_method: TrainingMethod = TrainingMethod.BATCH, validation_set: np.ndarray = None, validation_targets: np.ndarray = None, batch_size: float = 0.1):
 
     if training_set.shape[1] != ground_truths.shape[1]:
       raise Exception(f"Training set e ground_truths non hanno lo stesso numero di campioni!")
@@ -73,7 +111,7 @@ class FullConnectedNeuralNetwork(ABC):
     self.mean_val_accuracy = []
     self.accuracies = []
 
-    number_of_samples = training_set.shape[1] + 1
+    number_of_samples = training_set.shape[1]
     number_of_val_samples = validation_set.shape[1] + 1 if validation_set is not None else 0
     print(f"Working with {number_of_samples} train samples and {number_of_val_samples} val samples")
 
@@ -124,7 +162,7 @@ class FullConnectedNeuralNetwork(ABC):
           if validation_set is not None:
             print(f"Fine epoch #{epoch}; mean_train_error = {mean_error:1.8f} - mean_val_error: {val_error:1.8f} - accuracy = {self.accuracy:1.8f} - val_accuracy = {val_accuracy:1.8f}")
           else:
-            print(f"Fine epoch #{epoch}; mean_train_error = {mean_error:1.8f} - accuracy = {self.accuracy:1.8f}")
+            print(f"Fine epoch #{epoch}; mean_train_error = {mean_error:1.8f} - accuracy = {self.accuracy:1.3f}")
 
       # Caso difficile: devo dividere il training set in input in x mini-batch. Per ogni mini-batch poi devo calcolare la media dell'errore e usare la sua derivata per
       # aggiornare i pesi della rete
@@ -228,42 +266,6 @@ class FullConnectedNeuralNetwork(ABC):
 
     print("End training.")
 
-  def _back_propagate(self, ground_truth: np.ndarray):
-    last_delta_valore = 0
-    layer_index = 0
-
-    weights_delta = []
-    biases_delta = []
-
-    for layer_index in range(len(self.layers)-1, -1, -1):
-      layer = self.layers[layer_index]
-      
-      dAdZ = layer.activation_function_derivative # 10, 1
-      dZdW = self.layers[layer_index].X # 256, 1
-
-      # Output layer
-      if layer_index == len(self.layers) - 1:
-        dCdA = self.cost_function.compute_derivate(layer.A, ground_truth) # 10, 1
-      else:
-        dCdA = np.matmul(self.layers[layer_index + 1].weights.T, last_delta_valore)
-
-      delta_valore = np.multiply(dAdZ, dCdA) #10, 1
-      dw = np.matmul(delta_valore, dZdW.T)# / layer.number_of_neurons
-      
-      db = np.sum(dCdA, axis = 1, keepdims=True)# / layer.number_of_neurons
-
-      weights_delta.append(dw) #  / delta_valore.shape[1]
-      biases_delta.append(db) #  / delta_valore.shape[1]
-
-      last_delta_valore = delta_valore
-
-    # I delta dei pesi e i delta dei biases sono "al contrario", ovvero quelli in posizione 0 della lista in realtà sono per il layer di output, quindi faccio il
-    # reverse della lista per averli sistemati
-    weights_delta.reverse()
-    biases_delta.reverse()
-
-    return weights_delta, biases_delta
-  
   def _update_parameters(self, dw: List[np.ndarray], db: List[np.ndarray]):
     raise NotImplementedError()
 
