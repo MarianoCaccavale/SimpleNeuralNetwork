@@ -22,15 +22,14 @@ class FullConnectedNeuralNetwork(ABC):
       if layers[i].previous_layer_neurons != layers[i - 1].number_of_neurons:
         raise Exception(f"Layer {i} e {i-1} non compatibili! Il layer {i}esimo ho connessioni per {layers[i].previous_layer_neurons}, mentre il layer {i-1}esima ha {layers[i].number_of_neurons}")
 
-    for layer in layers:
-      layer.learning_rate = learning_rate
+    self.learning_rate = learning_rate
 
     self.layers = layers
     self.accuracy = 0
     # self.precision = 0
     # self.recall = 0
 
-  def __feed_forward(self, input: np.array) -> np.array:
+  def __feed_forward(self, input: np.ndarray) -> np.ndarray:
     if input.shape[0] != self.layers[0].previous_layer_neurons:
       raise Exception(f"Input di dimensione non corretta! La rete si aspetta in input un vettore di dimensione {self.layers[0].previous_layer_neurons} ma l'input fornito ha dimensioni {input.shape[0]}")
 
@@ -43,14 +42,59 @@ class FullConnectedNeuralNetwork(ABC):
 
   def __compute_validation_error(self, validation_set: np.ndarray, validation_targets: np.ndarray):
     error = 0
-    for sample, ground_truth in zip(validation_set.T, validation_targets.T):
-      net_output = self.predict(sample)
-      error = error + self.cost_function.compute(net_output, ground_truth)
+    accuracy = 0
 
-    mean_error = error / validation_set.shape[1]
-    return mean_error
+    net_output = self.predict(validation_set)
+    error = self.cost_function.compute(net_output, validation_targets)
+    
+    index_of_max_net_output = np.argmax(net_output, axis=0)
+    index_of_max_ground_truth = np.argmax(validation_targets, axis=0)
 
-  def train(self, training_set: np.array, ground_truths: np.array, epochs: int, training_method: TrainingMethod = TrainingMethod.BATCH, validation_set: np.array = None, validation_targets: np.array = None, batch_size: float = 0.1):
+    accuracy = np.where(index_of_max_net_output == index_of_max_ground_truth, 1, 0).sum()
+
+    mean_error = error / (validation_set.shape[1])
+    mean_accuracy = accuracy / (validation_set.shape[1])
+    return mean_error, mean_accuracy
+  
+  def _back_propagate(self, ground_truth: np.ndarray):
+    last_delta_valore = 0
+    layer_index = 0
+
+    weights_delta = []
+    biases_delta = []
+
+    for layer_index in range(len(self.layers)-1, -1, -1):
+      layer = self.layers[layer_index]
+      
+      dZdW = self.layers[layer_index].X # 256, 1
+      dAdZ = layer.activation_function_derivative # 10, 1
+
+      # Output layer
+      if layer_index == len(self.layers) - 1:
+        dCdA = self.cost_function.compute_derivate(layer.A, ground_truth) # 10, 1
+      else:
+        dCdA = np.matmul(self.layers[layer_index + 1].weights.T, last_delta_valore)
+
+      delta_valore = np.multiply(dAdZ, dCdA) #10, 1
+      dw = np.matmul(delta_valore, dZdW.T)
+      dw /= delta_valore.shape[1]
+
+      db = dCdA.sum(axis = 1, keepdims=True)
+      db /= delta_valore.shape[1]
+
+      weights_delta.append(dw)
+      biases_delta.append(db)
+
+      last_delta_valore = delta_valore
+
+    # I delta dei pesi e i delta dei biases sono "al contrario", ovvero quelli in posizione 0 della lista in realtà sono per il layer di output, quindi faccio il
+    # reverse della lista per averli sistemati
+    weights_delta.reverse()
+    biases_delta.reverse()
+
+    return weights_delta, biases_delta
+
+  def train(self, training_set: np.ndarray, ground_truths: np.ndarray, epochs: int, training_method: TrainingMethod = TrainingMethod.BATCH, validation_set: np.ndarray = None, validation_targets: np.ndarray = None, batch_size: float = 0.1):
 
     if training_set.shape[1] != ground_truths.shape[1]:
       raise Exception(f"Training set e ground_truths non hanno lo stesso numero di campioni!")
@@ -64,10 +108,12 @@ class FullConnectedNeuralNetwork(ABC):
 
     self.mean_train_error = []
     self.mean_val_error = []
+    self.mean_val_accuracy = []
     self.accuracies = []
 
     number_of_samples = training_set.shape[1]
-    print(f"Working with {number_of_samples} samples")
+    number_of_val_samples = validation_set.shape[1] + 1 if validation_set is not None else 0
+    print(f"Working with {number_of_samples} train samples and {number_of_val_samples} val samples")
 
     # L'index mi serve per sapere a che iterazione sono nel caso di batch o mini-batch
     index = 0
@@ -91,50 +137,32 @@ class FullConnectedNeuralNetwork(ABC):
           # Ad inizio di ogni epoca, uso la rete allo stato corrente per calcolarmi l'errore medio sul validation_set. In questo modo 
           # non vado in "conflitto" con l'aggiornamento dei pesi(calcolo il val_error PRIMA di aggiornare i pesi)
           if validation_set is not None:
-              val_error = self.__compute_validation_error(validation_set, validation_targets)
+              val_error, val_accuracy = self.__compute_validation_error(validation_set, validation_targets)
               self.mean_val_error.append(val_error)
+              self.mean_val_accuracy.append(val_accuracy)
 
-          # Per tutto il training set
-          for training_sample, ground_truth in zip(training_set.T, ground_truths.T):
-            # Calcolo l'output della rete
-            net_output = self.__feed_forward(training_sample)
-            # Sommo gli errori campione per campione
-            error = error + self.cost_function.compute(net_output, ground_truth)
-            index_of_max_net_output = np.argmax(net_output)
-            index_of_max_ground_truth = np.argmax(ground_truth)
+          # Calcolo l'output della rete
+          net_output = self.__feed_forward(training_set)
+          # Sommo gli errori campione per campione
+          error = self.cost_function.compute(net_output, ground_truths)
+          index_of_max_net_output = np.argmax(net_output, axis=0)
+          index_of_max_ground_truth = np.argmax(ground_truths, axis=0)
 
-            if index_of_max_net_output == index_of_max_ground_truth:
-              self.accuracy = self.accuracy + 1
+          self.accuracy = np.where(index_of_max_net_output == index_of_max_ground_truth, 1, 0).sum()
 
-            if index == 0:
-              sum_of_weights_delta, sum_of_biases_delta = self._back_propagate(ground_truth)
-            else:
-              weights_delta, biases_delta = self._back_propagate(ground_truth)
+          gradient_weight_list, gradient_bias_list = self._back_propagate(ground_truths)
 
-              for i in range(0, len(sum_of_weights_delta)):
-                sum_of_weights_delta[i] = sum_of_weights_delta[i] + weights_delta[i]
-                sum_of_biases_delta[i] = sum_of_biases_delta[i] + biases_delta[i]
-
-            index = index + 1
-
-          # Ora faccio la media dei delta
-          for i in range(0, len(sum_of_weights_delta)):
-            mean_function = lambda x: x/number_of_samples
-            vectorize_mean_function = np.vectorize(mean_function)
-            sum_of_weights_delta[i] = vectorize_mean_function(sum_of_weights_delta[i])
-            sum_of_biases_delta[i] = vectorize_mean_function(sum_of_biases_delta[i])
-
-          for layer_index in range(0, len(self.layers)):
-            self.layers[layer_index].update_parameters(sum_of_weights_delta[layer_index], sum_of_biases_delta[layer_index])
+          self._update_parameters(gradient_weight_list, gradient_bias_list)
 
           mean_error = error / number_of_samples
           self.mean_train_error.append(mean_error)
           self.accuracy = self.accuracy / number_of_samples
           self.accuracies.append(self.accuracy)
+
           if validation_set is not None:
-            print(f"Fine epoch #{epoch}; mean_train_error = {mean_error:1.8f} - mean_val_error: {val_error:1.8f} - accuracy = {self.accuracy:1.8f}")
+            print(f"Fine epoch #{epoch}; mean_train_error = {mean_error:1.8f} - mean_val_error: {val_error:1.8f} - accuracy = {self.accuracy:1.8f} - val_accuracy = {val_accuracy:1.8f}")
           else:
-            print(f"Fine epoch #{epoch}; mean_train_error = {mean_error:1.8f} - accuracy = {self.accuracy:1.8f}")
+            print(f"Fine epoch #{epoch}; mean_train_error = {mean_error:1.8f} - accuracy = {self.accuracy:1.3f}")
 
       # Caso difficile: devo dividere il training set in input in x mini-batch. Per ogni mini-batch poi devo calcolare la media dell'errore e usare la sua derivata per
       # aggiornare i pesi della rete
@@ -238,8 +266,8 @@ class FullConnectedNeuralNetwork(ABC):
 
     print("End training.")
 
-  def _back_propagate(self, ground_truth: np.array):
-    raise NotImplementedError("STAI USANDO UNA CLASSE ASTRATTA SOCIO, ACCANNA")
+  def _update_parameters(self, dw: List[np.ndarray], db: List[np.ndarray]):
+    raise NotImplementedError()
 
-  def predict(self, sample: np.array) -> np.array:
-    return self.__feed_forward(sample)
+  def predict(self, samples: np.ndarray) -> np.ndarray:
+    return self.__feed_forward(samples)

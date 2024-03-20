@@ -7,7 +7,7 @@ from Net.FullConnectedNeuralNetwork import FullConnectedNeuralNetwork
 
 class FullConnectedNeuralNetworkRprop(FullConnectedNeuralNetwork):
 
-  def __init__(self, layers: List[Layer], cost_function: Callable[[np.array, np.array], float ],
+  def __init__(self, layers: List[Layer], cost_function: Callable[[np.ndarray, np.ndarray], float ],
                rprop_eta_plus: float = 1.2, rprop_eta_minus: float = 0.5,
                max_step_size: float = 50., min_step_size:float = 1e-6):
 
@@ -26,82 +26,53 @@ class FullConnectedNeuralNetworkRprop(FullConnectedNeuralNetwork):
     self.min_step_size = min_step_size
     self._initialize_step_sizes()
 
-    self.last_gradient_per_layer = [None] * len(layers)
+    self.last_weight_gradient_per_layer = [None] * len(layers)
+    self.last_bias_gradient_per_layer = [None] * len(layers)
 
   def _initialize_step_sizes(self):
-    self.step_sizes = []
+    self.weight_step_sizes = []
+    self.bias_step_sizes = []
 
     for layer in self.layers:
-      self.step_sizes.append(np.full(layer.weights.shape, self.max_step_size/2))
+      self.weight_step_sizes.append(np.full(layer.weights.shape, 0.005))
+      self.bias_step_sizes.append(np.full(layer.biases.shape, 0.005))
 
-  def _compute_gradient_change(self, last_gradient: np.array, current_gradient: np.array):
+  def _compute_gradient_change(self, last_gradient: np.ndarray, current_gradient: np.ndarray):
     return np.multiply(np.sign(last_gradient), np.sign(current_gradient))
 
-  def _update_step_size(self, layer_index: int, gradient_change: np.ndarray):
+  def _update_step_size(self, layer_index: int, weight_gradient_change: np.ndarray, bias_gradient_change: np.ndarray):
 
-    self.step_sizes[layer_index] = np.where(gradient_change > 0, 
-                                            np.minimum(self.step_sizes[layer_index] * self.rprop_eta_plus, self.max_step_size), 
-                                            self.step_sizes[layer_index])
+    self.weight_step_sizes[layer_index] = np.where(weight_gradient_change > 0, 
+                                            np.minimum(self.weight_step_sizes[layer_index] * self.rprop_eta_plus, self.max_step_size), 
+                                            self.weight_step_sizes[layer_index])
   
-    self.step_sizes[layer_index] = np.where(gradient_change < 0, 
-                                            np.maximum(self.step_sizes[layer_index] * self.rprop_eta_minus, self.min_step_size), 
-                                            self.step_sizes[layer_index])
-
+    self.weight_step_sizes[layer_index] = np.where(weight_gradient_change < 0, 
+                                            np.maximum(self.weight_step_sizes[layer_index] * self.rprop_eta_minus, self.min_step_size), 
+                                            self.bias_step_sizes[layer_index])
     
-  # def _improve_gradient(self, gradient_diffs: np.array, current_gradient: np.array):
-  #   for row_index in range(0, gradient_diffs.shape[0]):
-  #     for col_index in range(0, gradient_diffs.shape[1]):
-  #       if gradient_diffs is not None and gradient_diffs[row_index, col_index] < 0:
-  #         current_gradient[row_index][col_index] = 0
-  #   return current_gradient
+    self.bias_step_sizes[layer_index] = np.where(bias_gradient_change > 0, 
+                                            np.minimum(self.bias_step_sizes[layer_index] * self.rprop_eta_plus, self.max_step_size), 
+                                            self.bias_step_sizes[layer_index])
+  
+    self.bias_step_sizes[layer_index] = np.where(bias_gradient_change < 0, 
+                                            np.maximum(self.bias_step_sizes[layer_index] * self.rprop_eta_minus, self.min_step_size), 
+                                            self.bias_step_sizes[layer_index])
 
-  def _back_propagate(self, ground_truth: np.array):
+  def _improve_gradient(self, gradient_diffs: np.ndarray, current_gradient: np.ndarray):
+    return np.where(gradient_diffs >= 0, current_gradient, 0)
 
-    last_dCdA = 0
-    layer_index = 0
+  def _update_parameters(self, dw: List[np.ndarray], db: List[np.ndarray]):
+    for layer_index in range(len(self.layers)):
 
-    weights_delta = []
-    biases_delta = []
+      if self.last_weight_gradient_per_layer[layer_index] is not None:
+        weight_gradient_change = self._compute_gradient_change(self.last_weight_gradient_per_layer[layer_index], dw[layer_index])
+        bias_gradient_change = self._compute_gradient_change(self.last_bias_gradient_per_layer[layer_index], db[layer_index])
+        self._update_step_size(layer_index, weight_gradient_change, bias_gradient_change)
+        # dw[layer_index] = self._improve_gradient(gradient_change, dw[layer_index])
 
-    gradient_change = None
+      self.last_weight_gradient_per_layer[layer_index] = dw[layer_index]
+      self.last_bias_gradient_per_layer[layer_index] = db[layer_index]
 
-    for layer_index in range(len(self.layers)-1, -1, -1):
-
-      layer = self.layers[layer_index]
-
-      # Output layer
-      if layer_index == len(self.layers) - 1:
-        dCdA = self.cost_function.compute_derivate(layer.A, ground_truth)[:, np.newaxis]
-        dZdW = self.layers[layer_index - 1].A[:, np.newaxis].T
-        dCdW = np.dot(dCdA, dZdW) / layer.number_of_neurons
-
-      else:
-        dAdZ = layer.activation_function_derivative[:, np.newaxis]
-        first_part = np.dot(self.layers[layer_index + 1].weights.T, last_dCdA)
-        dCdA = first_part *  dAdZ
-        dCdW = np.dot(dCdA, layer.X[:, np.newaxis].T) / layer.number_of_neurons
-
-      # Se invece ho già salvato la derivata della funzione di costo aggiorno gli step moltiplicando l'attuale costo 
-      # per il costo del "tempo" precedente
-      if self.last_gradient_per_layer[layer_index] is not None:
-        gradient_change = self._compute_gradient_change(self.last_gradient_per_layer[layer_index], dCdW)
-        self._update_step_size(layer_index, gradient_change)
-
-      dw = np.multiply(-np.sign(dCdW), self.step_sizes[layer_index])
-
-      #if gradient_change is not None:
-      #  dCdW = self._improve_gradient(gradient_change, dCdW)
-
-      db = np.sum(dCdA, axis = 1, keepdims=True) / layer.number_of_neurons
-
-      self.last_gradient_per_layer[layer_index] = dCdW
-
-      weights_delta.append(dw)
-      biases_delta.append(db)
-
-      last_dCdA = dCdA
-
-    weights_delta.reverse()
-    biases_delta.reverse()
-
-    return weights_delta, biases_delta
+      delta_weight = (-np.sign(dw[layer_index]) * self.weight_step_sizes[layer_index])
+      delta_bias = -(-np.sign(db[layer_index]) * self.bias_step_sizes[layer_index])
+      self.layers[layer_index].update_parameters(delta_weight, delta_bias)
