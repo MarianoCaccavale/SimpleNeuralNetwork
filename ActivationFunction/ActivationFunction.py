@@ -51,27 +51,11 @@ class TanhActivationFunction(ActivationFunction):
 class RELUActivationFunction(ActivationFunction):
   def compute(x:np.ndarray) -> np.ndarray:
     return np.where(x>0, x, 0)
-    result = []
-    for elem in x:
-      result.append(max(0.0, elem))
-    return np.ndarray(result)
   def compute_derivate(x:np.ndarray) -> np.ndarray:
     return np.where(x<=0, 0, 1)
-    result = []
-    for elem in x:
-      result.append(0 if elem <= 0 else 1)
-    return np.ndarray(result)
 
 class LeakyRELUActivationFunction(ActivationFunction):
   def compute(x:np.ndarray) -> np.ndarray:
     return np.where(x>0, x, 0.01*x)
-    result = []
-    for elem in x:
-      result.append(max(0.01*elem, elem))
-    return np.ndarray(result)
   def compute_derivate(x:np.ndarray) -> np.ndarray:
     return np.where(x<=0, 0.01, 1)
-    result = []
-    for elem in x:
-      result.append(0.01 if elem <= 0 else 1)
-    return np.ndarray(result)
